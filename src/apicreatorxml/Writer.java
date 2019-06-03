@@ -11,7 +11,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Set;
+import java.util.HashSet;
+import java.util.Stack;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.xml.parsers.DocumentBuilder;
@@ -31,11 +32,12 @@ import org.w3c.dom.Element;
  * @author adgao
  */
 public class Writer {
-    private HashMap<String, ArrayList<String>> grammarWithActions;//antecedente, producciones// the grammar with the semantics actions
+    private HashMap<String, ArrayList<String>> grammar;//antecedente, producciones// the grammar with the semantics actions
     //private HashMap<String, ArrayList<String>> grammar;//antecedente, producciones//the grammar without the semantics actions
     private String path;//path of the file of the grammar
     private String pathResult;
-    private String entryChain;
+    private Stack<String> pendChain;
+    private String readChain;
     private Element espec;
     private Document doc;
     private Integer ruleCount=1;
@@ -45,24 +47,34 @@ public class Writer {
     private ArrayList<Paso> steps;
     private HashMap<String, String> ruleId;//rule, id of the rule
     private Integer pasoCount=0;
+    private String traductorType;
     
     
     
     
-    
-    public Writer( String path, String pathResult, String entryChain) {
+    public Writer( String path, String pathResult, String entryChainPath, Boolean isDescendat) {
         //this.grammar = new HashMap<>();
-        this.grammarWithActions = new HashMap<>();
+        this.grammar = new HashMap<>();
         this.path=path;
         this.pathResult=pathResult;
         this.antecedentes=new ArrayList<>();
+        this.pendChain=new Stack<>();
+        
         readFile();
+        readChain(entryChainPath);
         //grammarWithoutActions();
         this.ruleId=new HashMap<>();
         
-        this.entryChain=entryChain;
+        
         this.nodes=new ArrayList<>();
         this.steps=new ArrayList<>();
+        if(isDescendat){
+            traductorType="Descendente";
+        }
+        else{
+            traductorType="Ascendente";
+        }
+        
         DocumentBuilderFactory dbFactory =DocumentBuilderFactory.newInstance();
         DocumentBuilder dBuilder=null;
         try {
@@ -81,7 +93,7 @@ public class Writer {
 	attr.setValue("Especificación del XML");
         espec.setAttributeNode(attr); 
         
-        
+        writeTraductor();
         
         //this.table= new Integer[this.noTerminals.size()][this.terminals.size()];
         
@@ -108,12 +120,10 @@ public class Writer {
     } 
     /**
      * add a new step to the step list
-     * @param tipo
-     * tipe of the step
-     * @param leido
-     * read chain
-     * @param pendiente
-     * pend chain
+     * @param isDisplacement
+     * true if is displacement false if not
+     * @param elementoLeido
+     * read element of the chain if exist 
      * @param element
      * element that is being processed
      * @param valor
@@ -125,8 +135,109 @@ public class Writer {
      * @return 
      * the new step
      */
-    public Paso addPaso(String tipo,String leido, String pendiente,String element, String valor, String regla,Integer relNodo){
-        Paso paso=new Paso(this.pasoCount, tipo, leido, pendiente, element, valor, relNodo, regla,1);
+    public Paso addPaso(Boolean isDisplacement,String elementoLeido,String element, String valor, String regla,HashSet<Integer> relNodo){
+        Paso paso=null;
+        if(elementoLeido!=null){
+             readChain+=pendChain.pop()+" ";
+        }
+        String pendiente=writePendChain();
+        if(isDisplacement && traductorType.equals("Descendente"))
+            paso=new Paso(this.pasoCount, "despDes", readChain, pendiente, element, valor, relNodo, regla,1);
+        else if(isDisplacement && !traductorType.equals("Descendente"))
+            paso=new Paso(this.pasoCount, "desplazamiento", readChain, pendiente, element, valor, relNodo, regla,1);
+        else if(!isDisplacement && traductorType.equals("Descendente"))
+            paso=new Paso(this.pasoCount, "derivacion", readChain, pendiente, element, valor, relNodo, regla,1);
+        else 
+            paso=new Paso(this.pasoCount, "reduccion", readChain, pendiente, element, valor, relNodo, regla,1);
+        steps.add(paso);
+        pasoCount++;
+        return paso;
+    } 
+    /**
+     * add a new step to the step list
+     * @param isDisplacement
+     * true if is displacement false if not
+     * @param elementoLeido
+     * read element of the chain if exist 
+     * @param element
+     * element that is being processed
+     * @param valor
+     * value of the element
+     * @param regla
+     * rule of the element (only if the symbol is the first of the rule)
+     * @return 
+     * the new step
+     */
+    public Paso addPaso(Boolean isDisplacement,String elementoLeido,String element, String valor, String regla){
+        Paso paso=null;
+        if(elementoLeido!=null){
+             readChain+=pendChain.pop()+" ";
+        }
+        String pendiente=writePendChain();
+        if(isDisplacement && traductorType.equals("Descendente"))
+            paso=new Paso(this.pasoCount, "despDes", readChain, pendiente, element, valor, null, regla,1);
+        else if(isDisplacement && !traductorType.equals("Descendente"))
+            paso=new Paso(this.pasoCount, "desplazamiento", readChain, pendiente, element, valor, null, regla,1);
+        else if(!isDisplacement && traductorType.equals("Descendente"))
+            paso=new Paso(this.pasoCount, "derivacion", readChain, pendiente, element, valor, null, regla,1);
+        else 
+            paso=new Paso(this.pasoCount, "reduccion", readChain, pendiente, element, valor, null, regla,1);
+        steps.add(paso);
+        pasoCount++;
+        return paso;
+    } 
+    /**
+     * add a new step to the step list
+     * @param element
+     * element that is being processed
+     * @param valor
+     * value of the element
+     * @param regla
+     * rule of the element (only if the symbol is the first of the rule)
+     * @return 
+     * the new step
+     */
+    public Paso addPasoPrimero(String element, String valor, String regla){
+        String pendiente=writePendChain();
+        Paso paso=new Paso(this.pasoCount, "primero", readChain, pendiente, element, valor, null, regla,1);
+        steps.add(paso);
+        pasoCount++;
+        return paso;
+    } 
+    /**
+     * 
+     * add a new step to the step list
+     * @param isDisplacement
+     * true if is displacement false if not
+     * @param elementoLeido
+     * read element of the chain if exist 
+     * @param element
+     * element that is being processed
+     * @param valor
+     * value of the element
+     * @param regla
+     * rule of the element (only if the symbol is the first of the rule)
+     * @param relNodo
+     * related nodes or parents nodes
+     * @return 
+     * the new step
+     */
+    public Paso addPaso(Boolean isDisplacement,String elementoLeido,String element, String valor, String regla,Integer relNodo){
+        HashSet<Integer> relNodes=new HashSet<>();
+        relNodes.add(relNodo);
+        if(elementoLeido!=null){
+             readChain+=pendChain.pop()+" ";
+        }
+        String pendiente=writePendChain();
+        Paso paso=null;
+        if(isDisplacement && traductorType.equals("Descendente"))
+            paso=new Paso(this.pasoCount, "despDes", readChain, pendiente, element, valor, relNodes, regla,1);
+        else if(isDisplacement && !traductorType.equals("Descendente"))
+            paso=new Paso(this.pasoCount, "desplazamiento", readChain, pendiente, element, valor, relNodes, regla,1);
+        else if(!isDisplacement && traductorType.equals("Descendente"))
+            paso=new Paso(this.pasoCount, "derivacion", readChain, pendiente, element, valor, relNodes, regla,1);
+        else 
+            paso=new Paso(this.pasoCount, "reduccion", readChain, pendiente, element, valor, relNodes, regla,1);
         steps.add(paso);
         pasoCount++;
         return paso;
@@ -164,406 +275,8 @@ public class Writer {
             }
         return true;
     }
-    
-    /**
-     * Process the entry chain
-     * @param entryChain 
-     * chain to process
-     */
-//    public void proccess(String entryChain, String pathResult){
-//        this.entryChain=entryChain;
-//        
-//        DocumentBuilderFactory dbFactory =DocumentBuilderFactory.newInstance();
-//        DocumentBuilder dBuilder=null;
-//        try {
-//            dBuilder = dbFactory.newDocumentBuilder();
-//        } catch (ParserConfigurationException ex) {
-//            Logger.getLogger(Writer.class.getName()).log(Level.SEVERE, null, ex);
-//        }
-//        doc = dBuilder.newDocument();
-//
-//        Element rootElement = doc.createElement("raiz");
-//        doc.appendChild(rootElement);
-//        Element espec = doc.createElement("espec");
-//        rootElement.appendChild(espec);
-//        Attr attr = doc.createAttribute("nombre");
-//	attr.setValue("Especificación del XML");
-//        espec.setAttributeNode(attr); 
-//        writeTraductor(espec);
-//        Stack<String> stack=new Stack<>();
-//        stack.push("$");
-////        stack.push("$");
-//        stack.push(axioma);
-//        nivel=1;
-////        Node axiom=new Node(numNodos,axioma , false, nivel);
-////        numNodos++;
-////        nodes.add(axiom);
-//        Stack<String> stackChain=new Stack<>();
-//        stackChain.push("$");
-//        String stackChainRead="";
-////        Stack<String> stackChainRead=new Stack<>();
-////        stackChain.push("$");
-//        //String[] chain=transformChain(entryChain).split(" ");
-//        String[] chain=entryChain.split(" ");
-//        for(int i=chain.length-1;i>=0;i--){
-//            stackChain.push(chain[i]);
-//        }
-//        int count=0;
-//        boolean aximaFinish=false;
-//        while(!stack.isEmpty()){
-//            
-//            if(stack.peek().equals("$")&&stackChain.peek().equals("$")){
-//                stack.pop();
-//            }
-//            else{
-//                if(stack.peek().equals("#")){
-//                    stack.pop();
-//                    nivel--;
-//                }
-//                else{
-//                    String pendChain=representChain(stackChain);
-//                    if(!stackChain.isEmpty()&&Character.isDigit(stackChain.peek().charAt(0))){
-//                        Integer value=Integer.parseInt(stackChain.pop());
-//                        Stack<Integer> aux=values.get("num.vlex");
-//                        if(values.get("num.vlex")==null){
-//                            aux=new Stack<>();
-//                            values.put("num.vlex", aux);
-//
-//                        }
-//
-//                        aux.push(value);
-//                        stackChain.push("num");
-//                    }
-//                    if(!stackChain.isEmpty()&&stack.peek().equals(stackChain.peek())){
-//                        String element=stack.pop();
-//                        Paso p=null;
-//                        String idRegla=null;
-//                        Integer widthRegla=null;
-//                        if(element.equals(idsRules.get(symbolRules.get(element).peek()).split(" ")[1])){
-//                          idRegla=symbolRules.get(element).pop();
-//                          widthRegla=idsRules.get(idRegla).length();  
-//                        }
-//                        if(element.equals("num")){
-//                            stackChainRead+=" "+values.get("num.vlex").peek().toString();
-//                            stackChain.pop();
-//                            String pendingChain= representChain(stackChain);
-//                            p=new Paso(paso, "despDes", stackChainRead.substring(1),pendingChain.substring(0,pendingChain.length()-2 ), element,"num.vlex="+ values.get("num.vlex").peek().toString(),relNodes.get(element).pop(), idRegla, widthRegla);
-//                        }
-//                        else{
-//                            stackChainRead+=" "+stackChain.pop();
-//                            String pendingChain= representChain(stackChain);
-//                            p=new Paso(paso, "despDes", stackChainRead.substring(1), pendingChain.substring(0,pendingChain.length()-2 ), element, null,relNodes.get(element).pop(), idRegla, widthRegla);
-//                        }
-//
-//
-//                        Node node=new Node(numNodos,element , true, nivel);
-//                        numNodos++;
-//                        nodes.add(node);
-//
-//                        //Paso p=new Paso(paso, "despDes", stackChainRead.substring(1), representChain(stackChain), element, values.get("num.vlex").toString(),relNodes.get(element), null, null);
-//
-//                        steps.add(p);
-//                        paso++;
-//
-//                    }
-//                    else{
-//                        if(!stack.peek().startsWith("{")){
-//
-//                            if(stack.peek().equals("λ")){
-//                                String element=stack.pop();
-//
-//                                Node node=new Node(numNodos,element , true, nivel);
-//                                numNodos++;
-//                                nodes.add(node);
-//                                String idRegla=null;
-//                                Integer widthRegla=null;
-//                                if(element.equals(idsRules.get(symbolRules.get(element).peek()).split(" ")[1])){
-//                                    idRegla=symbolRules.get(element).pop();
-//                                    widthRegla=idsRules.get(idRegla).length();  
-//                                }
-//                                String pendingChain=representChain(stackChain);
-//                                Paso p=new Paso(paso, "derivacion", stackChainRead.substring(1), pendingChain.substring(0,pendingChain.length()-2 ), element, null, relNodes.get(element).pop(), idRegla, widthRegla);
-//
-//                                steps.add(p);
-//                                paso++;
-//                            }
-//                            else{
-//                                count=0;
-//                                if(!grammarWithActions.containsKey(stack.peek())){
-//                                    String symbol=stack.pop();
-//                                    Integer index=getNumberIndex(symbol);
-//                                    String element=symbol.substring(0, index);
-//                                    stack.push(element);
-//
-//                                    Integer num=table.get(stack.pop()).get(stackChain.peek());
-//                                    String production=numRules.get(num);
-//                                    String[] symbols=production.split(" ");
-//                                    stack.push("#");
-//                                    
-//                                    for(int i=symbols.length-1;i>0;i--){
-//                                        if(symbols[i].startsWith("{")){
-//                                            symbols[i]=symbols[i]+symbol;
-//                                        }
-//                                        stack.push(symbols[i]);
-//                                        Stack<Integer> relNodeSim=relNodes.get(symbols[i]);
-//                                        if(relNodeSim==null){
-//                                            relNodeSim=new Stack<>();
-//                                            relNodes.put(symbols[i],relNodeSim);
-//                                        }
-//                                        relNodeSim.push(paso);
-//                                        Stack<String> ids=null;
-//                                        if(symbolRules.get(symbols[i])==null){
-//                                            ids=new Stack<>();
-//                                            symbolRules.put(symbols[i], ids);
-//                                        }
-//                                        else{
-//                                            ids=symbolRules.get(symbols[i]);
-//                                        }
-//                                        ids.push(ruleId.get(production));
-//                                    }
-//
-//                                    nivel++;
-//                                    altura=Math.max(altura, nivel);
-//                                    Node node=new Node(numNodos,symbol , false, nivel-1);
-//                                    numNodos++;
-//                                    nodes.add(node);
-//                                    String idRegla=null;
-//                                    Integer widthRegla=null;
-//                                    if(symbol.equals(idsRules.get(symbolRules.get(symbol).peek()).split(" ")[1])){
-//                                        idRegla=symbolRules.get(symbol).pop();
-//                                        widthRegla=idsRules.get(idRegla).length();  
-//                                    }
-//                                    String readChain=null;
-//                                    if(!stackChainRead.isEmpty())
-//                                            readChain=stackChainRead.substring(1);
-//                                    if(!values.containsKey(element+".result")){
-//                                        Stack<Integer> aux=new Stack<>();
-//                                        values.put(element+".result", aux);
-//                                        aux.push(null);
-//                                    }
-//                                    String value=getValues(element);
-//                                    if (value==null)
-//                                        value=symbol+".result=null";
-//
-//    //                                if(values.get(symbol)!=null)
-//    //                                    value=values.get(symbol).toString();
-//                                    String pendingChain=representChain(stackChain);
-//                                    Paso p=new Paso(paso, "derivacion", readChain,pendingChain.substring(0,pendingChain.length()-2 ), symbol, value, relNodes.get(symbol).pop(), idRegla, widthRegla);
-//
-//                                    steps.add(p);
-//                                    paso++;
-//
-//                                }
-//                                else{
-//                                    String element=stack.pop();
-//                                    Integer num=table.get(element).get(stackChain.peek());
-//                                    String production=numRules.get(num);
-//                                    String[] symbols=production.split(" ");
-//                                    stack.push("#");
-//                                    for(int i=symbols.length-1;i>0;i--){
-//                                        if(symbols[i].startsWith("{")){
-//                                            symbols[i]=symbols[i]+element;
-//                                        }
-//                                        stack.push(symbols[i]);
-//                                        Stack<Integer> relNodeSim=relNodes.get(symbols[i]);
-//                                        if(relNodeSim==null){
-//                                            relNodeSim=new Stack<>();
-//                                            relNodes.put(symbols[i],relNodeSim);
-//                                        }
-//                                        relNodeSim.push(paso);
-//                                        Stack<String> ids=null;
-//                                        if(symbolRules.get(symbols[i])==null){
-//                                            ids=new Stack<>();
-//                                            symbolRules.put(symbols[i], ids);
-//                                        }
-//                                        else{
-//                                            ids=symbolRules.get(symbols[i]);
-//                                        }
-//                                        ids.push(ruleId.get(production));
-//                                    }
-//
-//                                    nivel++;
-//                                    altura=Math.max(altura, nivel);
-//                                    Node node=new Node(numNodos,element , false, nivel-1);
-//                                    numNodos++;
-//                                    nodes.add(node);
-//                                    Paso p=null;
-//                                    if(!aximaFinish && axioma.equals(element)){
-//                                        String pendingChain=representChain(stackChain);
-//                                        p=new Paso(paso, "primero", null,pendingChain.substring(0,pendingChain.length()-2 ) , element, null, null, null, null);
-//                                        aximaFinish=true;
-//                                    }
-//                                    else{
-//                                        String idRegla=null;
-//                                        Integer widthRegla=null;
-//                                        if(element.equals(idsRules.get(symbolRules.get(element).peek()).split(" ")[1])){
-//                                            idRegla=symbolRules.get(element).pop();
-//                                            widthRegla=idsRules.get(idRegla).length();  
-//                                        }
-//                                        String readChain=null;
-//                                        if(!stackChainRead.isEmpty())
-//                                            readChain=stackChainRead.substring(1);
-//                                        Stack<Integer> aux;
-//                                        if(!values.containsKey(element+".result")){
-//                                            aux=new Stack<>();
-//                                            values.put(element+".result", aux);
-//
-//                                        }
-//                                        values.get(element+".result").push(null);
-//                                        String value=getValues(element);
-//                                        if (value==null)
-//                                            value=element+".result=null";
-//
-//    //                                    if(values.get(element)!=null)
-//    //                                        value=values.get(element).toString();
-//                                        String pendingChain=representChain(stackChain);
-//                                        p=new Paso(paso, "derivacion", readChain, pendingChain.substring(0,pendingChain.length()-2 ), element, value, relNodes.get(element).pop(), idRegla, widthRegla);
-//                                    }
-//                                    steps.add(p);
-//                                    paso++;
-//                                }
-//                            }
-//                        }
-//                        else{
-//                            String action=stack.pop();
-//
-//                            String recursive;
-//                            //if(action.split("}").length>1){
-//                                recursive=action.split("}")[1];
-//                                action=action.substring(0,action.length()-recursive.length());
-//                            //}
-//                            String[] varValue=action.substring(1,action.length()-2).split("=");
-//
-//                            String noTerminalWithNumber=varValue[0];
-//
-//                            Integer position=getNumberIndex(varValue[0].split("\\.")[0]);
-//                            Paso pasoActual=steps.get(steps.size()-1);
-//                            if(varValue.length>1){
-//    //                            String noTerminalWithNumber=varValue[0];
-//                                if (position<varValue[0].split("\\.")[0].length()){
-//                                    varValue[0]=varValue[0].split("\\.")[0].substring(0,position)+"."+varValue[0].split("\\.")[1];
-//
-//                                }
-//                                position=getNumberIndex(varValue[1].split("\\.")[0]);
-//                                if (position<varValue[1].split("\\.")[0].length()){
-//                                    varValue[1]=varValue[1].split("\\.")[0].substring(0,position)+"."+varValue[1].split("\\.")[1];
-//
-//                                }
-//
-//                                    if(varValue[1].contains("+")||varValue[1].contains("-")||varValue[1].contains("/")||varValue[1].contains("*")){
-//                                        Integer value=calculateValue(varValue[1]);
-//                                        Stack<Integer> aux=values.get(varValue[0]);
-//                                        if(aux==null){
-//                                            aux=new Stack<>();
-//                                            values.put(varValue[0], aux);
-//                                        }
-//                                        aux.push(value);
-//        //                                if(!noTerminalWithNumber.equals(varValue[0])){
-//        //                                    aux=values.get(noTerminalWithNumber);
-//        //                                    if(aux==null){
-//        //                                        aux=new Stack<>();
-//        //                                        values.put(noTerminalWithNumber, aux);
-//        //                                    }
-//        //                                    aux.push(value);
-//        //                                }
-//                                    }
-//
-//                                    else{
-//                                        Stack<Integer> aux=values.get(varValue[0]);
-//                                        if(aux==null){
-//                                            aux=new Stack<>();
-//                                            values.put(varValue[0], aux);
-//                                        }
-//                                        aux.push(values.get(varValue[1]).peek());
-//        //                                if(!noTerminalWithNumber.equals(varValue[0])){
-//        //                                    aux=values.get(noTerminalWithNumber);
-//        //                                    if(aux==null){
-//        //                                        aux=new Stack<>();
-//        //                                        values.put(noTerminalWithNumber, aux);
-//        //                                    }
-//        //                                    aux.push(values.get(varValue[1]).peek());
-//        //                                }
-//                                    }
-//                                    //varValue[0]=noTerminalWithNumber;
-//                                if(antecedentes.contains(noTerminalWithNumber.split("\\.")[0])){
-//                                    ArrayList<Paso> stepsBefore=findSteps(varValue[0],pasoActual,recursive);
-//                                    for (Paso stepBefore:stepsBefore){
-//                                        pasoActual.getChangedNodes().add(stepBefore.getId());
-//                                        String bucar=varValue[0].split("\\.")[0];
-//                                        pasoActual.getChanges().add(getValues(varValue[0].split("\\.")[0]));//varValue[0]+"="+values.get(varValue[0]).peek());
-//
-//                                    }
-//                                    if(count==0&&pasoActual.getElemento().equals("λ")&&values.get(varValue[0].split("\\.")[0]+".valor")!=null){
-//
-//                                        values.get(varValue[0].split("\\.")[0]+".valor").pop();
-//                                    }
-//                                    count=1;
-//                                }
-//                            }
-//                        }
-//                    }    
-//               }
-//           }
-//       }
-//    nivel++;
-//    writeArbol(espec);
-//    writeContenido(espec);
-//    TransformerFactory transformerFactory = TransformerFactory.newInstance();
-//    Transformer transformer=null;
-//        try {
-//            transformer = transformerFactory.newTransformer();
-//        } catch (TransformerConfigurationException ex) {
-//            Logger.getLogger(Writer.class.getName()).log(Level.SEVERE, null, ex);
-//        }
-//    DOMSource source = new DOMSource(doc);
-//    StreamResult result = new StreamResult(new File(pathResult+".xml"));
-//        try {
-//            transformer.transform(source, result);
-//        } catch (TransformerException ex) {
-//            Logger.getLogger(Writer.class.getName()).log(Level.SEVERE, null, ex);
-//        }
-//
-//    // Output to console for testing
-//    StreamResult consoleResult = new StreamResult(System.out);
-//        try { 	
-//            transformer.transform(source, consoleResult);
-//        } catch (TransformerException ex) {
-//            Logger.getLogger(Writer.class.getName()).log(Level.SEVERE, null, ex);
-//        }
-//    }
-    /**
-     * 
-     * @param chain
-     * @return 
-     
-    public String transformChain(String chain){
-        String result="";
-        String[] elements=chain.split(" ");
-        for (int i=0;i<elements.length;i++){
-            if(Character.isDigit(elements[i].charAt(0))){
-                result+="num ";
-            }
-            else{
-                result+=elements[i]+" ";
-            }
-        }
-        return result.substring(0,result.length()-1);
-    }*/
-    /**
-     * Produce a new grammar without semantics actions
-     */
-//    public void grammarWithoutActions(){
-//        Set<String> antecedentes=grammarWithActions.keySet();
-//        for(String antecedent:antecedentes){
-//            ArrayList<String> productions=grammarWithActions.get(antecedent);
-//            ArrayList<String>newProductions=new ArrayList<>();
-//            for(String production:productions){
-//                String newProduction=removeActions(production);
-//                newProductions.add(newProduction);
-//            }
-//            grammar.put(antecedent, newProductions);
-//        }
-//    }
+
+ 
     /**
      * remove the semantics actions of a production
      * @param production
@@ -571,13 +284,13 @@ public class Writer {
      * @return
      * production without actions
      */
-    public String removeActions(String production){
+    private String removeActions(String production){
         String[] symbols=production.split(" ");
         String result="";
         for(int i=0;i<symbols.length;i++){
             String symbol=symbols[i];
             if(!symbol.startsWith("{")){
-                if(grammarWithActions.containsKey(symbol)){
+                if(grammar.containsKey(symbol)){
                     result+=symbol+" ";
                 }
                 else{
@@ -594,7 +307,7 @@ public class Writer {
      * @return 
      * a production without the actions
      */
-    public String removeOnlyActions(String production){
+    private String removeOnlyActions(String production){
         String[] symbols=production.split(" ");
         String result="";
         for(int i=0;i<symbols.length;i++){
@@ -629,7 +342,7 @@ public class Writer {
      * read and save the grammar with actions semantics 
      */
     private void readFile() {
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(path), "UTF-16"))) { //mas-accesos-servidor-nitflex.log
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(path), "UTF-8"))) { //mas-accesos-servidor-nitflex.log
 	            String line;
                     int contador=0;
 	            while ((line = br.readLine()) != null) {
@@ -638,7 +351,7 @@ public class Writer {
                         if(!antecedentes.contains(antecedentProductions[0]))
                             antecedentes.add(antecedentProductions[0]);
                         ArrayList<String> productionsList = new ArrayList<>();
-                        grammarWithActions.put(antecedentProductions[0], productionsList);
+                        grammar.put(antecedentProductions[0], productionsList);
                         for(int i=0;i<productions.length;i++){
                             String production=productions[i];
                             productionsList.add(production);
@@ -660,15 +373,15 @@ public class Writer {
         espec.appendChild(traductor); 
         Element tipo= doc.createElement("tipo");
         traductor.appendChild(tipo);
-        tipo.setTextContent("Descendente");
+        tipo.setTextContent(traductorType);
         for(String antecedent:antecedentes){
-            for(String production:grammarWithActions.get(antecedent)){
+            for(String production:grammar.get(antecedent)){
               addRule(antecedent,production,traductor);  
             }
         }
         Element cadena = doc.createElement("cadena");
         espec.appendChild(cadena);
-        cadena.setTextContent(entryChain);
+        cadena.setTextContent(readChain+writePendChain());
     }
     /**
      * write a rule in xml
@@ -763,7 +476,7 @@ public class Writer {
                 regla.appendChild(simbolo);
                 Element valor=doc.createElement("valor");
                 simbolo.appendChild(valor);
-                if(grammarWithActions.get(antecedente).get(0).equals(production))
+                if(grammar.get(antecedente).get(0).equals(production))
                     valor.setTextContent(antecedente+"::=");
                 else
                     valor.setTextContent("|");
@@ -789,11 +502,10 @@ public class Writer {
         }
     }
     /**
-     * write the part of <arbol> of the xml
-     * @param altura
-     * heigth of the tree 
+     * write the part of <arbol> of the xml 
      */
-    public void writeArbol(Integer altura) {
+    public void writeArbol() {
+       Integer altura=updateNode();
        Element arbol = doc.createElement("arbol");
        espec.appendChild(arbol);
        Element numNodosE = doc.createElement("num_nodos");
@@ -862,7 +574,8 @@ public class Writer {
             pasoE.appendChild(elemento);
             if(step.getRelNodo()!=null){
                 Element relNodos = doc.createElement("relNodos");
-                relNodos.setTextContent(step.getRelNodo().toString());
+                String relNodes=writeRelNodes(step.getRelNodo());
+                relNodos.setTextContent(relNodes);
                 pasoE.appendChild(relNodos);
             }
             Element valor = doc.createElement("valor");
@@ -884,6 +597,94 @@ public class Writer {
                 }
             }
         }
+    }
+    /**
+     * transform the HashSet relNode into a String
+     * @param relNodo
+     * Hashset to transform
+     * @return 
+     * the String of relational nodes
+     */
+    private String writeRelNodes(HashSet<Integer> relNodo) {
+        String result="";
+        for(Integer node:relNodo){
+            result+=" "+node;
+        }
+        return result.substring(1);
+    }
+    /**
+     * read the chain
+     * @param entryChainPath
+     * path of the file .txt with the chain
+     */
+    private void readChain(String entryChainPath) {
+       readChain="";
+       try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(entryChainPath), "UTF-8"))) { 
+	            String line;
+                    int contador=0;
+	            while ((line = br.readLine()) != null) {
+                        String[] chainElements=line.split(" ");
+                        for(int i=chainElements.length-1;i>=0;i--){
+                            pendChain.push(chainElements[i]);
+                        }
+                    }
+        }
+        catch (IOException e) {
+	    e.printStackTrace();
+	} 
+    }
+    /**
+     * transform the pendingChain Stack into a String 
+     * @return 
+     * pending chain in form of String
+     */
+    private String writePendChain() {
+        String result="";
+        for(String elem:pendChain){
+            result=elem+" "+result;
+        }
+        return result.substring(0,result.length());
+    }
+
+    public Integer getPasoCount() {
+        return pasoCount;
+    }
+    /**
+     * update the level in the sintactic tree of the nodes
+     * @return 
+     * the heigth of the sintactic tree
+     */
+    private Integer updateNode(){
+        Paso raiz;
+        if(this.traductorType.equals("Ascendente")) 
+            raiz=steps.get(steps.size()-1);
+        else
+            raiz=steps.get(0);
+        Integer altura=1;
+        for(Node nodo:nodes){
+            Integer nivel=distanciaARaiz(raiz,nodo);
+            nodo.setNivel(nivel);
+            altura=Math.max(altura, nivel);
+        }
+        return altura;
+    }
+    /**
+     * Calculate the distance between the node and the root of the sintactic tree
+     * @param raiz
+     * root of the sintactic tree
+     * @param objetivo
+     * node to start
+     * @return 
+     * distance between the node and the root of the sintactic tree in form of Integer
+     */
+    private Integer distanciaARaiz(Paso raiz, Node objetivo) {
+        Integer i=1;
+        Node actual=objetivo;
+        while (!actual.getId().equals(raiz.getId())){
+            i++;
+            actual=actual.getFahterNode();
+        }
+        return i;
     }
     
 }

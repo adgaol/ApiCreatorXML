@@ -6,6 +6,7 @@
 package apicreatorxml;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 
 /**
  *
@@ -20,11 +21,12 @@ public class Paso {
     private String valor;    
     private String regla;
     private Integer widthRule;
-    private Integer relNodo;
+    private HashSet<Integer> relNodo;
     private ArrayList<Integer> changedNodes;
     private ArrayList<String> changes;
+   
 
-    public Paso(Integer id, String tipo, String leido, String pendiente, String elemento, String valor,Integer relNodo, String regla, Integer widthRule) {
+    public Paso(Integer id, String tipo, String leido, String pendiente, String elemento, String valor,HashSet<Integer> relNodo, String regla, Integer widthRule) {
         this.id = id;
         this.tipo = tipo;
         this.leido = leido;
@@ -102,15 +104,13 @@ public class Paso {
         this.widthRule = widthRule;
     }
 
-    public Integer getRelNodo() {
+    public HashSet<Integer> getRelNodo() {
         return relNodo;
     }
 
-    public void setRelNodo(Integer relNodo) {
+    public void setRelNodo(HashSet<Integer> relNodo) {
         this.relNodo = relNodo;
     }
-
-   
 
     public ArrayList<Integer> getChangedNodes() {
         return changedNodes;

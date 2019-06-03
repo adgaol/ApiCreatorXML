@@ -14,7 +14,7 @@ public class Node {
     private String element;
     private Boolean terminal;
     private Integer nivel;
-
+    private Node fahterNode;
     public Node(Integer id, String element, Boolean terminal, Integer nivel) {
         this.id = id;
         this.element = element;
@@ -53,5 +53,15 @@ public class Node {
     public void setNivel(Integer nivel) {
         this.nivel = nivel;
     }
+
+    public Node getFahterNode() {
+        return fahterNode;
+    }
+
+    public void setFahterNode(Node fahterNode) {
+        this.fahterNode = fahterNode;
+    }
+    
+    
     
 }
