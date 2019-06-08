@@ -20,13 +20,12 @@ public class Paso {
     private String elemento;
     private String valor;    
     private String regla;
-    private Integer widthRule;
     private HashSet<Integer> relNodo;
     private ArrayList<Integer> changedNodes;
     private ArrayList<String> changes;
    
 
-    public Paso(Integer id, String tipo, String leido, String pendiente, String elemento, String valor,HashSet<Integer> relNodo, String regla, Integer widthRule) {
+    public Paso(Integer id, String tipo, String leido, String pendiente, String elemento, String valor,HashSet<Integer> relNodo, String regla) {
         this.id = id;
         this.tipo = tipo;
         this.leido = leido;
@@ -34,7 +33,6 @@ public class Paso {
         this.elemento = elemento;
         this.valor = valor;
         this.regla = regla;
-        this.widthRule = widthRule;
         this.relNodo = relNodo;
         this.changedNodes = new ArrayList<>();
         this.changes = new ArrayList<>();
@@ -96,13 +94,7 @@ public class Paso {
         this.regla = regla;
     }
 
-    public Integer getWidthRule() {
-        return widthRule;
-    }
-
-    public void setWidthRule(Integer widthRule) {
-        this.widthRule = widthRule;
-    }
+    
 
     public HashSet<Integer> getRelNodo() {
         return relNodo;

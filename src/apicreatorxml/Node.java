@@ -14,12 +14,14 @@ public class Node {
     private String element;
     private Boolean terminal;
     private Integer nivel;
-    private Node fahterNode;
-    public Node(Integer id, String element, Boolean terminal, Integer nivel) {
+    private Node fatherNode;
+    private Boolean haveBrother;
+    public Node(Integer id, String element, Boolean terminal, Integer nivel,Boolean haveBrother) {
         this.id = id;
         this.element = element;
         this.terminal = terminal;
         this.nivel = nivel;
+        this.haveBrother=haveBrother;
     }
 
     public Integer getId() {
@@ -54,12 +56,16 @@ public class Node {
         this.nivel = nivel;
     }
 
-    public Node getFahterNode() {
-        return fahterNode;
+    public Node getFatherNode() {
+        return fatherNode;
     }
 
-    public void setFahterNode(Node fahterNode) {
-        this.fahterNode = fahterNode;
+    public void setFatherNode(Node fahterNode) {
+        this.fatherNode = fahterNode;
+    }
+
+    public Boolean getHaveBrother() {
+        return haveBrother;
     }
     
     

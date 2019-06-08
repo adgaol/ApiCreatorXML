@@ -48,7 +48,7 @@ public class Writer {
     private HashMap<String, String> ruleId;//rule, id of the rule
     private Integer pasoCount=0;
     private String traductorType;
-    
+    private HashMap<Integer,Paso>stepMaps;//step id , step
     
     
     
@@ -59,7 +59,7 @@ public class Writer {
         this.pathResult=pathResult;
         this.antecedentes=new ArrayList<>();
         this.pendChain=new Stack<>();
-        
+        this.stepMaps=new HashMap<>();
         readFile();
         readChain(entryChainPath);
         //grammarWithoutActions();
@@ -112,8 +112,8 @@ public class Writer {
      * @return 
      * the new node
      */
-    public Node addNode(String element, Boolean terminal, Integer nivel){
-        Node node=new Node(numNodos, element, terminal, nivel);
+    public Node addNode(String element, Boolean terminal,Boolean haveBrother){
+        Node node=new Node(numNodos, element, terminal, 0,haveBrother);
         nodes.add(node);
         numNodos++;
         return node;
@@ -142,14 +142,15 @@ public class Writer {
         }
         String pendiente=writePendChain();
         if(isDisplacement && traductorType.equals("Descendente"))
-            paso=new Paso(this.pasoCount, "despDes", readChain, pendiente, element, valor, relNodo, regla,1);
+            paso=new Paso(this.pasoCount, "despDes", readChain, pendiente, element, valor, relNodo, regla);
         else if(isDisplacement && !traductorType.equals("Descendente"))
-            paso=new Paso(this.pasoCount, "desplazamiento", readChain, pendiente, element, valor, relNodo, regla,1);
+            paso=new Paso(this.pasoCount, "desplazamiento", readChain, pendiente, element, valor, relNodo, regla);
         else if(!isDisplacement && traductorType.equals("Descendente"))
-            paso=new Paso(this.pasoCount, "derivacion", readChain, pendiente, element, valor, relNodo, regla,1);
+            paso=new Paso(this.pasoCount, "derivacion", readChain, pendiente, element, valor, relNodo, regla);
         else 
-            paso=new Paso(this.pasoCount, "reduccion", readChain, pendiente, element, valor, relNodo, regla,1);
+            paso=new Paso(this.pasoCount, "reduccion", readChain, pendiente, element, valor, relNodo, regla);
         steps.add(paso);
+        stepMaps.put(this.pasoCount, paso);
         pasoCount++;
         return paso;
     } 
@@ -175,14 +176,15 @@ public class Writer {
         }
         String pendiente=writePendChain();
         if(isDisplacement && traductorType.equals("Descendente"))
-            paso=new Paso(this.pasoCount, "despDes", readChain, pendiente, element, valor, null, regla,1);
+            paso=new Paso(this.pasoCount, "despDes", readChain, pendiente, element, valor, null, regla);
         else if(isDisplacement && !traductorType.equals("Descendente"))
-            paso=new Paso(this.pasoCount, "desplazamiento", readChain, pendiente, element, valor, null, regla,1);
+            paso=new Paso(this.pasoCount, "desplazamiento", readChain, pendiente, element, valor, null, regla);
         else if(!isDisplacement && traductorType.equals("Descendente"))
-            paso=new Paso(this.pasoCount, "derivacion", readChain, pendiente, element, valor, null, regla,1);
+            paso=new Paso(this.pasoCount, "derivacion", readChain, pendiente, element, valor, null, regla);
         else 
-            paso=new Paso(this.pasoCount, "reduccion", readChain, pendiente, element, valor, null, regla,1);
+            paso=new Paso(this.pasoCount, "reduccion", readChain, pendiente, element, valor, null, regla);
         steps.add(paso);
+        stepMaps.put(this.pasoCount, paso);
         pasoCount++;
         return paso;
     } 
@@ -199,8 +201,9 @@ public class Writer {
      */
     public Paso addPasoPrimero(String element, String valor, String regla){
         String pendiente=writePendChain();
-        Paso paso=new Paso(this.pasoCount, "primero", readChain, pendiente, element, valor, null, regla,1);
+        Paso paso=new Paso(this.pasoCount, "primero", readChain, pendiente, element, valor, null, regla);
         steps.add(paso);
+        stepMaps.put(this.pasoCount, paso);
         pasoCount++;
         return paso;
     } 
@@ -231,14 +234,15 @@ public class Writer {
         String pendiente=writePendChain();
         Paso paso=null;
         if(isDisplacement && traductorType.equals("Descendente"))
-            paso=new Paso(this.pasoCount, "despDes", readChain, pendiente, element, valor, relNodes, regla,1);
+            paso=new Paso(this.pasoCount, "despDes", readChain, pendiente, element, valor, relNodes, regla);
         else if(isDisplacement && !traductorType.equals("Descendente"))
-            paso=new Paso(this.pasoCount, "desplazamiento", readChain, pendiente, element, valor, relNodes, regla,1);
+            paso=new Paso(this.pasoCount, "desplazamiento", readChain, pendiente, element, valor, relNodes, regla);
         else if(!isDisplacement && traductorType.equals("Descendente"))
-            paso=new Paso(this.pasoCount, "derivacion", readChain, pendiente, element, valor, relNodes, regla,1);
+            paso=new Paso(this.pasoCount, "derivacion", readChain, pendiente, element, valor, relNodes, regla);
         else 
-            paso=new Paso(this.pasoCount, "reduccion", readChain, pendiente, element, valor, relNodes, regla,1);
+            paso=new Paso(this.pasoCount, "reduccion", readChain, pendiente, element, valor, relNodes, regla);
         steps.add(paso);
+        stepMaps.put(this.pasoCount, paso);
         pasoCount++;
         return paso;
     } 
@@ -248,6 +252,8 @@ public class Writer {
      * true if the operation is successful false if not
      */
     public Boolean writeXML(){
+        writeArbol();
+        writeContenido();
         TransformerFactory transformerFactory = TransformerFactory.newInstance();
         Transformer transformer=null;
             try {
@@ -345,6 +351,9 @@ public class Writer {
         try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(path), "UTF-8"))) { //mas-accesos-servidor-nitflex.log
 	            String line;
                     int contador=0;
+                    br.mark(1);
+                    if (br.read() != 0xFEFF)
+                        br.reset();
 	            while ((line = br.readLine()) != null) {
                         String[] antecedentProductions=line.split("::=");    
                         String[] productions=antecedentProductions[1].split("\\|");
@@ -368,7 +377,7 @@ public class Writer {
     /**
     * write the part of <traductor> and <cadena> in a xml
     */
-    public void writeTraductor() {
+    private void writeTraductor() {
         Element traductor = doc.createElement("traductor");
         espec.appendChild(traductor); 
         Element tipo= doc.createElement("tipo");
@@ -504,7 +513,7 @@ public class Writer {
     /**
      * write the part of <arbol> of the xml 
      */
-    public void writeArbol() {
+    private void writeArbol() {
        Integer altura=updateNode();
        Element arbol = doc.createElement("arbol");
        espec.appendChild(arbol);
@@ -537,7 +546,7 @@ public class Writer {
     /**
      * write the part of <contenido> of the xml
      */
-    public void writeContenido( ) {
+    private void writeContenido( ) {
         Element contenido = doc.createElement("contenido");
         espec.appendChild(contenido);
         for(Paso step:steps){
@@ -556,9 +565,7 @@ public class Writer {
                 nuevaRegla.setTextContent(step.getRegla());
                 nuevaRegla.setAttributeNode(refRegla); 
                 pasoE.appendChild(nuevaRegla); 
-                Element widthRegla = doc.createElement("widthRegla");
-                widthRegla.setTextContent(step.getWidthRule().toString());
-                pasoE.appendChild(widthRegla); 
+                
             }
 
             Element cadena = doc.createElement("cadena");
@@ -682,9 +689,62 @@ public class Writer {
         Node actual=objetivo;
         while (!actual.getId().equals(raiz.getId())){
             i++;
-            actual=actual.getFahterNode();
+            actual=actual.getFatherNode();
         }
         return i;
+        
     }
+    /**
+     * return the step corresponding with the id 
+     * @param id
+     * id of the step
+     * @return 
+     * step 
+     */
+    public Paso getStep(Integer id){
+        return stepMaps.get(id);
+        
+    }
+    public HashMap<String, ArrayList<String>> getGrammar() {
+        return grammar;
+    }
+
+    public String getPath() {
+        return path;
+    }
+
+    public String getPathResult() {
+        return pathResult;
+    }
+
+    public Element getEspec() {
+        return espec;
+    }
+
+    public Document getDoc() {
+        return doc;
+    }
+
+    public Integer getRuleCount() {
+        return ruleCount;
+    }
+
+    public Integer getNumNodos() {
+        return numNodos;
+    }
+
+    public ArrayList<Node> getNodes() {
+        return nodes;
+    }
+
+    public ArrayList<Paso> getSteps() {
+        return steps;
+    }
+
+    public String getTraductorType() {
+        return traductorType;
+    }
+
+    
     
 }
