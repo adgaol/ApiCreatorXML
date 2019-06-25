@@ -744,7 +744,36 @@ public class Writer {
     public String getTraductorType() {
         return traductorType;
     }
+    /**
+     * save the updated values of the steps whose value depend of this step
+     * @param paso
+     * step whose save the values 
+     * @param node
+     * node process in this step
+     * @param value 
+     * value to updated
+     */
+    public void updatesValues(Paso paso,Node node, String value){
+        Node nodeAux=node.getFatherNode();
+        while (!nodeAux.getHaveBrother()){
+            paso.getChangedNodes().add(nodeAux.getId());
+            Paso pasoAux =getStep(nodeAux.getId());
+            String values=pasoAux.getValor();
 
+            values=values.replace("null",value );
+            paso.getChanges().add(values); 
+            nodeAux=nodeAux.getFatherNode();
+        }
+        paso.getChangedNodes().add(nodeAux.getId());
+        Paso pasoAux =getStep(nodeAux.getId());
+        String values=pasoAux.getValor();
+
+        values=values.replace("null",value );
+        paso.getChanges().add(values); 
+            
+        
+    }
+        
     
     
 }
